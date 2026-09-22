@@ -2,6 +2,12 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // Sin esto, tsc sigue expo/tsconfig.base y resuelve node_modules contra
+    // el código fuente TSX interno de cada paquete (pensado para que Metro lo
+    // bundlee, no para chequeo de tipos) en vez de su build/*.d.ts. Esto NO
+    // afecta a Metro/el bundle real — Metro tiene su propio resolver,
+    // independiente de este tsconfig.
+    "customConditions": [],
     "paths": {
       "@/*": [
         "./src/*"
