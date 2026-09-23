@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useFocusEffect } from 'expo-router';
 
+import { MapaPedidos } from '@/components/mapa-pedidos';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -43,6 +44,8 @@ export default function MiosScreen() {
           Mis pedidos
         </ThemedText>
 
+        {pedidos.length > 0 && <MapaPedidos pedidos={pedidos} />}
+
         {cargando && pedidos.length === 0 ? (
           <ActivityIndicator style={styles.loader} />
         ) : (
@@ -61,7 +64,12 @@ export default function MiosScreen() {
               <Link href={`/pedidos/${item.id}`} asChild>
                 <Pressable style={({ pressed }) => pressed && styles.pressed}>
                   <ThemedView type="backgroundElement" style={styles.card}>
-                    <ThemedText type="smallBold">{item.nombre}</ThemedText>
+                    <View style={styles.filaNombre}>
+                      <ThemedText type="smallBold">{item.nombre}</ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        #{item.id}
+                      </ThemedText>
+                    </View>
                     <ThemedText type="small" themeColor="textSecondary">
                       {lugarDeDestino(item.destino).lugar}
                     </ThemedText>
@@ -84,5 +92,6 @@ const styles = StyleSheet.create({
   list: { gap: Spacing.three, paddingBottom: Spacing.six },
   empty: { textAlign: 'center', marginTop: Spacing.six },
   card: { borderRadius: Spacing.three, padding: Spacing.three, gap: Spacing.one },
+  filaNombre: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   pressed: { opacity: 0.7 },
 });

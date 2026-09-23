@@ -8,7 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useSession } from '@/services/auth/session-context';
 import { SesionExpiradaError } from '@/services/api';
-import { cancelarAsignacion, listarMios, lugarDeDestino, type Pedido } from '@/services/pedidos/pedidos-client';
+import { cancelarAsignacion, entregar, listarMios, lugarDeDestino, type Pedido } from '@/services/pedidos/pedidos-client';
 
 export default function PedidoDetalleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -16,6 +16,7 @@ export default function PedidoDetalleScreen() {
   const [pedido, setPedido] = useState<Pedido | null>(null);
   const [cargando, setCargando] = useState(true);
   const [cancelando, setCancelando] = useState(false);
+  const [entregando, setEntregando] = useState(false);
 
   // No hay GET /pedidos/:id todavía (ver PLAN_PASO0.md) — se busca dentro de "mis
   // pedidos", que es de donde siempre se llega a esta pantalla.
@@ -60,6 +61,25 @@ export default function PedidoDetalleScreen() {
     }
   }
 
+  async function entregarPedido() {
+    if (!pedido) {
+      return;
+    }
+    setEntregando(true);
+    try {
+      await entregar(pedido.id);
+      router.back();
+    } catch (error) {
+      if (error instanceof SesionExpiradaError) {
+        clearLocalSession();
+        return;
+      }
+      Alert.alert('No se pudo marcar como entregado', 'Intentá de nuevo.');
+    } finally {
+      setEntregando(false);
+    }
+  }
+
   if (cargando) {
     return (
       <ThemedView style={styles.container}>
@@ -82,7 +102,7 @@ export default function PedidoDetalleScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
         <ThemedText type="title" style={styles.title}>
-          {pedido.nombre}
+          {pedido.nombre} <ThemedText type="small" themeColor="textSecondary">#{pedido.id}</ThemedText>
         </ThemedText>
         <ThemedText themeColor="textSecondary">{lugarDeDestino(pedido.destino).lugar}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary" style={styles.estado}>
@@ -90,7 +110,18 @@ export default function PedidoDetalleScreen() {
         </ThemedText>
 
         <Pressable
-          disabled={cancelando}
+          disabled={cancelando || entregando}
+          onPress={entregarPedido}
+          style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
+          <ThemedView type="backgroundSelected" style={styles.buttonInner}>
+            <ThemedText type="smallBold">
+              {entregando ? 'Entregando…' : 'Entregar pedido'}
+            </ThemedText>
+          </ThemedView>
+        </Pressable>
+
+        <Pressable
+          disabled={cancelando || entregando}
           onPress={cancelar}
           style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
           <ThemedView type="backgroundElement" style={styles.buttonInner}>
