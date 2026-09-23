@@ -81,7 +81,7 @@ export default function DisponiblesScreen() {
               <ThemedView type="backgroundElement" style={styles.card}>
                 <ThemedText type="smallBold">{item.nombre}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  {lugarDeDestino(item.destino)}
+                  {lugarDeDestino(item.destino).lugar}
                 </ThemedText>
                 <Pressable
                   disabled={tomando === item.id}

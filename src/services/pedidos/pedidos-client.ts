@@ -28,7 +28,7 @@ export function cancelarAsignacion(id: number): Promise<Pedido> {
 }
 
 /** destino tiene formato "ubigeo|lat,lng|lugar" — ver client/pedidos.ts. */
-export function lugarDeDestino(destino: string): string {
-  const [, , lugar] = destino.split('|');
-  return lugar ?? destino;
+export function lugarDeDestino(destino: string): { ubigeo: string; latlng: string; lugar: string } {
+  const [ ubigeo,latlng , lugar] = destino.split('|');
+  return { ubigeo, latlng, lugar };
 }

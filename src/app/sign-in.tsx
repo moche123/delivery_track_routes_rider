@@ -16,7 +16,7 @@ export default function SignInScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ThemedText type="title" style={styles.title}>
-          Ridera
+          Rider
         </ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.subtitle}>
           Iniciá sesión con tu cuenta de Google para ver los pedidos disponibles.

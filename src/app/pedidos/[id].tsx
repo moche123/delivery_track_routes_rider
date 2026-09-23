@@ -84,7 +84,7 @@ export default function PedidoDetalleScreen() {
         <ThemedText type="title" style={styles.title}>
           {pedido.nombre}
         </ThemedText>
-        <ThemedText themeColor="textSecondary">{lugarDeDestino(pedido.destino)}</ThemedText>
+        <ThemedText themeColor="textSecondary">{lugarDeDestino(pedido.destino).lugar}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary" style={styles.estado}>
           Estado: {pedido.estado}
         </ThemedText>

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 import {
   type AuthUser,
@@ -7,7 +7,7 @@ import {
   logout as logoutClient,
   restoreSession,
 } from './auth-client';
-import { useGoogleIdToken } from './google-auth';
+import { exchangeCodeForIdTokenWeb, signInNative, useGoogleIdTokenWeb } from './google-auth';
 
 interface SessionContextValue {
   user: AuthUser | null;
@@ -15,7 +15,7 @@ interface SessionContextValue {
   isLoading: boolean;
   /** Esperando que el usuario complete el login de Google. */
   isSigningIn: boolean;
-  /** El request de Google todavía no terminó de armarse (deshabilita el botón). */
+  /** El request de Google todavía no terminó de armarse (deshabilita el botón). Solo aplica a web — en nativo siempre es true. */
   canSignIn: boolean;
   signIn: () => void;
   signOut: () => Promise<void>;
@@ -29,7 +29,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const { request, response, promptAsync } = useGoogleIdToken();
+  // Se llama siempre (hooks no pueden ser condicionales), pero solo se USA
+  // en web — en nativo el login es imperativo (signInNative), sin
+  // request/response/promptAsync.
+  const { request, response, promptAsync } = useGoogleIdTokenWeb();
 
   useEffect(() => {
     restoreSession()
@@ -37,14 +40,21 @@ export function SessionProvider({ children }: PropsWithChildren) {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // Solo web: reacciona al redirect de vuelta con el `code` y lo canjea.
   useEffect(() => {
-    if (!response) {
+    if (Platform.OS !== 'web' || !response) {
       return;
     }
 
-    if (response.type === 'success' && response.params.id_token) {
+    if (response.type === 'success' && response.params.code) {
+      if (!request) {
+        // No debería pasar (si hubo response, el request que lo generó ya
+        // existió), pero sin request no hay code_verifier para canjear.
+        return;
+      }
       setIsSigningIn(true);
-      loginWithGoogle(response.params.id_token)
+      exchangeCodeForIdTokenWeb(request, response.params.code)
+        .then((idToken) => loginWithGoogle(idToken))
         .then(setUser)
         .catch(() => Alert.alert('No se pudo iniciar sesión', 'Intentá de nuevo.'))
         .finally(() => setIsSigningIn(false));
@@ -57,7 +67,28 @@ export function SessionProvider({ children }: PropsWithChildren) {
         response.error?.message ?? 'Error desconocido de Google',
       );
     }
-  }, [response]);
+  }, [response, request]);
+
+  async function signIn() {
+    if (Platform.OS === 'web') {
+      void promptAsync();
+      return;
+    }
+
+    setIsSigningIn(true);
+    try {
+      const idToken = await signInNative();
+      if (!idToken) {
+        // Usuario cerró el picker de cuentas sin elegir — no es error.
+        return;
+      }
+      setUser(await loginWithGoogle(idToken));
+    } catch {
+      Alert.alert('No se pudo iniciar sesión', 'Intentá de nuevo.');
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
 
   async function signOut() {
     await logoutClient();
@@ -70,8 +101,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
         user,
         isLoading,
         isSigningIn,
-        canSignIn: !!request,
-        signIn: () => void promptAsync(),
+        canSignIn: Platform.OS === 'web' ? !!request : true,
+        signIn: () => void signIn(),
         signOut,
         clearLocalSession: () => setUser(null),
       }}>

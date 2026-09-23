@@ -63,7 +63,7 @@ export default function MiosScreen() {
                   <ThemedView type="backgroundElement" style={styles.card}>
                     <ThemedText type="smallBold">{item.nombre}</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {lugarDeDestino(item.destino)}
+                      {lugarDeDestino(item.destino).lugar}
                     </ThemedText>
                   </ThemedView>
                 </Pressable>

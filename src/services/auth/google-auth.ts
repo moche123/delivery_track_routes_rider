@@ -1,12 +1,9 @@
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
-import {
-  GOOGLE_CLIENT_ID_ANDROID,
-  GOOGLE_CLIENT_ID_IOS,
-  GOOGLE_CLIENT_ID_WEB,
-} from '@/constants/env';
+import { GOOGLE_CLIENT_ID_WEB } from '@/constants/env';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -15,56 +12,95 @@ const discovery: AuthSession.DiscoveryDocument = {
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
 };
 
-function clientIdParaPlataforma(): string {
-  if (Platform.OS === 'ios') {
-    return GOOGLE_CLIENT_ID_IOS;
-  }
-  if (Platform.OS === 'android') {
-    return GOOGLE_CLIENT_ID_ANDROID;
-  }
-  return GOOGLE_CLIENT_ID_WEB;
+/**
+ * SDK nativo de Google (Play Services en Android, GIDSignIn en iOS). El
+ * Client ID que importa acá es el WEB, no el Android/iOS — el de Android
+ * solo está registrado en Google Cloud Console por su package+SHA-1 (para
+ * que Play Services verifique que la app que pide el login es la legítima),
+ * nunca se referencia en código. Ver RIDER_SETUP.md §11 para el porqué.
+ */
+if (Platform.OS !== 'web') {
+  GoogleSignin.configure({ webClientId: GOOGLE_CLIENT_ID_WEB });
 }
 
 /**
- * Flujo OAuth genérico de expo-auth-session (funciona en Expo Go, sin
- * development build) — ver DOCUMENTACION_RIDER.md. El id_token llega en
- * `response.params.id_token` (docs.expo.dev/versions/v57.0.0/sdk/auth-session).
+ * Web: flujo de navegador de expo-auth-session, Authorization Code + PKCE —
+ * anda bien en `expo start --web`, nunca dio problemas.
  *
- * Ojo con Google y redirect_uri: en Expo Go, makeRedirectUri() genera un
- * exp://<ip-local>:<puerto>/--/... que Google normalmente NO acepta como
- * redirect URI registrada. Funciona confiable en `expo start --web`
- * (redirect http://localhost:<puerto>, sí aceptado por Google) — en
- * dispositivo/emulador nativo probablemente haga falta un development build
- * más adelante.
+ * Nativo (iOS/Android): NO usa esto — usa `signInNative()` más abajo, con
+ * el SDK nativo de Google. Motivo (confirmado con el panel "detalles del
+ * error" de la pantalla de bloqueo de Google, no una corazonada — ver
+ * RIDER_SETUP.md §11): los Client ID tipo Android/iOS de Google no están
+ * pensados para el flujo genérico de navegador
+ * (`/o/oauth2/v2/auth?redirect_uri=...`) — Google rechaza ese request con
+ * "Error 400: invalid_request" señalando el `redirect_uri` como inválido,
+ * sea cual sea el scheme que se le mande (se probó tanto un scheme custom
+ * cualquiera como el "Client ID invertido" que sugiere la documentación
+ * vieja de Google — ninguno funciona). El único camino soportado de verdad
+ * para esos Client ID es el SDK nativo (Play Services / GIDSignIn), que no
+ * usa redirect_uri en absoluto — por eso el cambio de librería.
  */
-export function useGoogleIdToken() {
+export function useGoogleIdTokenWeb() {
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
-      clientId: clientIdParaPlataforma(),
+      clientId: GOOGLE_CLIENT_ID_WEB,
       scopes: ['openid', 'profile', 'email'],
       // path fijo: sin esto, en web toma la ruta actual del navegador
       // (ej. /sign-in), que no siempre coincide con lo registrado en
       // Google Cloud Console → redirect_uri_mismatch.
       redirectUri: AuthSession.makeRedirectUri({ path: 'redirect' }),
-      responseType: AuthSession.ResponseType.IdToken,
-      // PKCE es solo para el flujo de código (response_type=code); con
-      // IdToken (implícito) Google rechaza el request si viaja
-      // code_challenge_method (Error 400: invalid_request).
-      // PASOS paso 1, cliente se loguea y manda la solicitud de autorizacion,
-      //  el code challenger y el metodo opcionalmente al servidor, 
-      // 2. el servidor genera un codigo y lo manda a la aplicacion,
-      //  3. ahora el usuario manda una solicitud de token, el codigo
-      //  enviado por el servidor y el verificador de codigo,
-      // 4. el servidor entonces tiene el verificador de codigo,
-      //  el codigo "ticket", todo lo necesario, entonces con la misma 
-      // funcion de hasheado, hashea al verificador de codigo, y lo
-      //  compara con el code challenge, ya con eso estan aprobada la
-      //  solicitud de token, y el token es devuelto, 
-      usePKCE: false,
-      extraParams: { nonce: String(Date.now()) },
+      responseType: AuthSession.ResponseType.Code,
+      usePKCE: true,
+      extraParams: {
+        nonce: String(Date.now()),
+        prompt: 'select_account',
+      },
     },
     discovery,
   );
 
   return { request, response, promptAsync };
+}
+
+/** Canje del `code` del redirect (web) por tokens reales — ver comentario del hook de arriba. */
+export async function exchangeCodeForIdTokenWeb(
+  request: AuthSession.AuthRequest,
+  code: string,
+): Promise<string> {
+  const tokenResponse = await AuthSession.exchangeCodeAsync(
+    {
+      clientId: GOOGLE_CLIENT_ID_WEB,
+      code,
+      redirectUri: request.redirectUri,
+      extraParams: request.codeVerifier ? { code_verifier: request.codeVerifier } : undefined,
+    },
+    discovery,
+  );
+
+  if (!tokenResponse.idToken) {
+    throw new Error('Google no devolvió id_token en el canje de código');
+  }
+
+  return tokenResponse.idToken;
+}
+
+/**
+ * Nativo (iOS/Android): abre el picker nativo de cuentas de Google (Play
+ * Services) — sin browser, sin WebView, sin Custom Tab. Devuelve `null` si
+ * el usuario cerró el picker sin elegir cuenta (no es un error a mostrar).
+ */
+export async function signInNative(): Promise<string | null> {
+  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+  const response = await GoogleSignin.signIn();
+
+  if (response.type === 'cancelled') {
+    return null;
+  }
+
+  const idToken = response.data.idToken;
+  if (!idToken) {
+    throw new Error('Google no devolvió id_token');
+  }
+
+  return idToken;
 }
