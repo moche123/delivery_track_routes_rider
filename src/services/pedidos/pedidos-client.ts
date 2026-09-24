@@ -9,6 +9,8 @@ export interface Pedido {
   estado: PedidoEstado;
   destino: string;
   foto: string | null;
+  /** Creación o última actualización (asignar/cancelar/entregar/editar) — ISO string. El mapa ordena por esto, no por `id`. */
+  actualizadoEn: string;
 }
 
 export function listarDisponibles(): Promise<Pedido[]> {
@@ -45,4 +47,12 @@ export function coordenadasDeDestino(destino: string): { latitude: number; longi
     return null;
   }
   return { latitude: lat, longitude: lng };
+}
+
+/** "HH:MM" de `actualizadoEn`. Cálculo manual (no `toLocaleTimeString`) para no depender de ICU en Hermes. */
+export function horaActualizacion(actualizadoEn: string): string {
+  const fecha = new Date(actualizadoEn);
+  const horas = String(fecha.getHours()).padStart(2, '0');
+  const minutos = String(fecha.getMinutes()).padStart(2, '0');
+  return `${horas}:${minutos}`;
 }

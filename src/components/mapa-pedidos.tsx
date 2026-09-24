@@ -32,11 +32,16 @@ export function MapaPedidos({ pedidos }: Props) {
 
   const { ubicacion, estado, reintentar } = useRiderLocation(pedidos.length > 0 && enFoco);
 
+  // Orden por `actualizadoEn`, no por `id`: un pedido cancelado y vuelto a
+  // tomar cambia su actualizadoEn (el backend lo reescribe en cada
+  // asignar/cancelar/entregar) aunque el `id` sea el mismo de siempre — así
+  // vuelve a contar como "recién tomado" en vez de quedar pegado a su
+  // antigüedad original.
   const { intermedios, destinoFinal } = useMemo(() => {
     const ordenados = [...pedidos]
       .map((pedido) => ({ pedido, coordenada: coordenadasDeDestino(pedido.destino) }))
       .filter((item) => item.coordenada !== null)
-      .sort((a, b) => a.pedido.id - b.pedido.id) as {
+      .sort((a, b) => new Date(a.pedido.actualizadoEn).getTime() - new Date(b.pedido.actualizadoEn).getTime()) as {
       pedido: Pedido;
       coordenada: { latitude: number; longitude: number };
     }[];
@@ -53,10 +58,9 @@ export function MapaPedidos({ pedidos }: Props) {
       ? [destinoFinal.coordenada.longitude, destinoFinal.coordenada.latitude]
       : CENTRO_DEFECTO;
 
-  const idsOrdenados = intermedios
-    .map((item) => item.pedido.id)
-    .concat(destinoFinal ? [destinoFinal.pedido.id] : [])
-    .sort((a, b) => a - b)
+  const firmaPedidos = intermedios
+    .map((item) => `${item.pedido.id}:${item.pedido.actualizadoEn}`)
+    .concat(destinoFinal ? [`${destinoFinal.pedido.id}:${destinoFinal.pedido.actualizadoEn}`] : [])
     .join(',');
   const hayUbicacionRider = ubicacion !== null;
 
@@ -99,7 +103,7 @@ export function MapaPedidos({ pedidos }: Props) {
       duration: 500,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsOrdenados, hayUbicacionRider]);
+  }, [firmaPedidos, hayUbicacionRider]);
 
   if (estado === 'denegado') {
     return (

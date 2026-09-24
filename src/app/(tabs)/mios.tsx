@@ -9,7 +9,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useSession } from '@/services/auth/session-context';
 import { SesionExpiradaError } from '@/services/api';
-import { listarMios, lugarDeDestino, type Pedido } from '@/services/pedidos/pedidos-client';
+import { horaActualizacion, listarMios, lugarDeDestino, type Pedido } from '@/services/pedidos/pedidos-client';
 
 export default function MiosScreen() {
   const { clearLocalSession } = useSession();
@@ -67,7 +67,7 @@ export default function MiosScreen() {
                     <View style={styles.filaNombre}>
                       <ThemedText type="smallBold">{item.nombre}</ThemedText>
                       <ThemedText type="small" themeColor="textSecondary">
-                        #{item.id}
+                        {horaActualizacion(item.actualizadoEn)}
                       </ThemedText>
                     </View>
                     <ThemedText type="small" themeColor="textSecondary">
