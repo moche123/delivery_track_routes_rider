@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useRiderLocation } from '@/services/ubicacion/rider-location';
+import { obtenerRutaPorCalles } from '@/services/rutas/ruta-osrm';
 import { coordenadasDeDestino, type Pedido } from '@/services/pedidos/pedidos-client';
 
 const ESTILO_MAPA = 'https://tiles.openfreemap.org/styles/liberty';
@@ -105,6 +106,33 @@ export function MapaPedidos({ pedidos }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firmaPedidos, hayUbicacionRider]);
 
+  // Geometría real de calle (OSRM) en vez de la recta. Se pide de nuevo
+  // cuando cambia el set de pedidos, o cuando el rider se movió lo
+  // suficiente (~100m, redondeando a 3 decimales) — no en cada tick de GPS
+  // (cada 5s), para no reventar el demo público de OSRM a pedidos.
+  const [rutaCalle, setRutaCalle] = useState<LngLat[] | null>(null);
+  const riderBucket = ubicacion ? `${ubicacion.latitude.toFixed(3)},${ubicacion.longitude.toFixed(3)}` : 'sin-fix';
+
+  useEffect(() => {
+    setRutaCalle(null); // el set de paradas o la posición base cambiaron: la geometría vieja ya no aplica
+
+    if (puntosRuta.length < 2) {
+      return;
+    }
+
+    let cancelado = false;
+    obtenerRutaPorCalles(puntosRuta).then((coordenadas) => {
+      if (!cancelado && coordenadas) {
+        setRutaCalle(coordenadas);
+      }
+    });
+
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firmaPedidos, riderBucket]);
+
   if (estado === 'denegado') {
     return (
       <View style={[styles.contenedor, styles.mensaje, { backgroundColor: theme.backgroundElement }]}>
@@ -129,13 +157,13 @@ export function MapaPedidos({ pedidos }: Props) {
             data={{
               type: 'Feature',
               properties: {},
-              geometry: { type: 'LineString', coordinates: puntosRuta },
+              geometry: { type: 'LineString', coordinates: rutaCalle ?? puntosRuta },
             }}>
-            <Layer
-              id="ruta-linea"
-              type="line"
-              paint={{ 'line-color': '#208AEF', 'line-width': 3, 'line-dasharray': [2, 1] }}
-            />
+            {rutaCalle ? (
+              <Layer key="ruta-linea-calle" id="ruta-linea-calle" type="line" paint={{ 'line-color': '#208AEF', 'line-width': 4 }} />
+            ) : (
+              <Layer key="ruta-linea-recta" id="ruta-linea-recta" type="line" paint={{ 'line-color': '#208AEF', 'line-width': 3 }} />
+            )}
           </GeoJSONSource>
         )}
 
