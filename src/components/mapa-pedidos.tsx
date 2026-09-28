@@ -6,8 +6,10 @@ import { useFocusEffect } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useSession } from '@/services/auth/session-context';
 import { useRiderLocation } from '@/services/ubicacion/rider-location';
 import { obtenerRutaPorCalles } from '@/services/rutas/ruta-osrm';
+import { desconectarSocket, emitirUbicacion } from '@/services/socket/rider-socket';
 import { coordenadasDeDestino, type Pedido } from '@/services/pedidos/pedidos-client';
 
 const ESTILO_MAPA = 'https://tiles.openfreemap.org/styles/liberty';
@@ -22,12 +24,16 @@ interface Props {
 export function MapaPedidos({ pedidos }: Props) {
   const theme = useTheme();
   const cameraRef = useRef<CameraRef>(null);
+  const { user } = useSession();
 
   const [enFoco, setEnFoco] = useState(true);
   useFocusEffect(
     useCallback(() => {
       setEnFoco(true);
-      return () => setEnFoco(false);
+      return () => {
+        setEnFoco(false);
+        desconectarSocket();
+      };
     }, []),
   );
 
@@ -132,6 +138,27 @@ export function MapaPedidos({ pedidos }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firmaPedidos, riderBucket]);
+
+  // Manda la ubicación en vivo por socket, una vez por cada pedido tomado —
+  // `client/` la escucha filtrando por `pedido_id` en el mapa de SU pedido.
+  // No persiste en Postgres, es solo para el mapa en vivo (ver rider-socket.ts).
+  useEffect(() => {
+    if (!ubicacion || !user || !enFoco) {
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    for (const pedido of pedidos) {
+      emitirUbicacion({
+        pedido_id: pedido.id,
+        driver_id: user.id,
+        lat: ubicacion.latitude,
+        lng: ubicacion.longitude,
+        timestamp,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ubicacion, firmaPedidos, user, enFoco]);
 
   if (estado === 'denegado') {
     return (
